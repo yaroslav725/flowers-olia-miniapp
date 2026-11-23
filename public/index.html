@@ -138,7 +138,11 @@ footer {text-align:center;padding:20px;font:16px Georgia,serif;color:var(--muted
 </div>
 
 <script>
-const tg = window.Telegram?.WebApp;
+const tg = window.Telegram.WebApp;
+  tg.ready();
+tg.expand();
+
+console.log("Telegram initData:", tg.initData ? "ПОЛУЧЕН" : "ПУСТО");
 tg?.ready();
 tg?.expand();
 
