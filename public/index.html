@@ -142,7 +142,12 @@ const tg = window.Telegram.WebApp;
   tg.ready();
 tg.expand();
 
-console.log("Telegram initData:", tg.initData ? "ПОЛУЧЕН" : "ПУСТО");
+alert(
+  "Telegram WebApp: " + (window.Telegram?.WebApp ? "ЕСТЬ" : "НЕТ") +
+  "\nВерсия: " + (tg?.version || "нет") +
+  "\nПлатформа: " + (tg?.platform || "нет") +
+  "\nДанные авторизации: " + (tg?.initData ? "ПОЛУЧЕНЫ" : "ПУСТО")
+);
 tg?.ready();
 tg?.expand();
 
