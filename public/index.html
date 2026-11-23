@@ -332,5 +332,208 @@ renderCategories();
 renderProducts();
 updateCart();
 </script>
-</body>
+<style>
+.account-section {
+  max-width: 440px;
+  margin: 35px auto;
+  padding: 24px;
+  background: #fff9fa;
+  border: 1px solid #f0dce2;
+  border-radius: 20px;
+  color: #593d46;
+  font-family: Arial, sans-serif;
+}
+.account-section h2 {
+  text-align: center;
+  margin-top: 0;
+}
+.account-section input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px;
+  margin: 12px 0;
+  border: 1px solid #e5cbd3;
+  border-radius: 10px;
+  font-size: 16px;
+}
+.account-section button {
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #d99eae;
+  color: white;
+  font-size: 15px;
+  cursor: pointer;
+}
+.account-section .secondary {
+  background: #f0e1e5;
+  color: #593d46;
+}
+.account-section button:disabled {
+  opacity: .6;
+}
+.account-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.account-actions button {
+  flex: 1;
+}
+.account-message {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 14px;
+}
+</style>
+
+<section class="account-section">
+  <h2>🌸 Личный кабинет</h2>
+
+  <div id="accountAuth">
+    <div class="account-actions">
+      <button type="button" id="accountRegisterTab">Регистрация</button>
+      <button type="button" class="secondary" id="accountLoginTab">Вход</button>
+    </div>
+
+    <form id="accountForm">
+      <input id="accountName" placeholder="Ваше имя" maxlength="100" required>
+      <input id="accountPhone" type="tel" placeholder="Номер телефона" required>
+      <input id="accountPassword" type="password" placeholder="Пароль (от 8 символов)" minlength="8" required>
+      <button type="submit" id="accountSubmit" style="width:100%">
+        Зарегистрироваться
+      </button>
+    </form>
+  </div>
+
+  <div id="accountProfile" hidden>
+    <p id="accountWelcome"></p>
+    <p id="accountPhoneView"></p>
+    <button type="button" id="accountLogout" class="secondary">
+      Выйти из аккаунта
+    </button>
+  </div>
+
+  <div id="accountMessage" class="account-message"></div>
+</section>
+
+<script>
+(() => {
+  const tokenKey = "flowersOliaToken";
+  const auth = document.getElementById("accountAuth");
+  const profile = document.getElementById("accountProfile");
+  const form = document.getElementById("accountForm");
+  const nameInput = document.getElementById("accountName");
+  const phoneInput = document.getElementById("accountPhone");
+  const passwordInput = document.getElementById("accountPassword");
+  const submit = document.getElementById("accountSubmit");
+  const message = document.getElementById("accountMessage");
+
+  let mode = "register";
+
+  function showMessage(text) {
+    message.textContent = text;
+  }
+
+  function setMode(newMode) {
+    mode = newMode;
+    nameInput.hidden = mode !== "register";
+    nameInput.required = mode === "register";
+    submit.textContent = mode === "register" ? "Зарегистрироваться" : "Войти";
+    showMessage("");
+  }
+
+  document.getElementById("accountRegisterTab").onclick = () => setMode("register");
+  document.getElementById("accountLoginTab").onclick = () => setMode("login");
+
+  function showProfile(user) {
+    auth.hidden = true;
+    profile.hidden = false;
+    document.getElementById("accountWelcome").textContent =
+      "Здравствуйте, " + user.name + "!";
+    document.getElementById("accountPhoneView").textContent =
+      "Телефон: " + user.phone;
+    showMessage("");
+  }
+
+  function showAuth() {
+    auth.hidden = false;
+    profile.hidden = true;
+  }
+
+  async function loadProfile() {
+    const token = localStorage.getItem(tokenKey);
+    if (!token) return;
+
+    try {
+      const response = await fetch("/api/me", {
+        headers: { Authorization: "Bearer " + token }
+      });
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        showProfile(data.user);
+      } else {
+        localStorage.removeItem(tokenKey);
+        showAuth();
+      }
+    } catch (error) {
+      showMessage("Не удалось проверить аккаунт. Попробуйте обновить страницу.");
+    }
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    submit.disabled = true;
+    showMessage("Подождите...");
+
+    const payload = {
+      phone: phoneInput.value.trim(),
+      password: passwordInput.value
+    };
+
+    if (mode === "register") {
+      payload.name = nameInput.value.trim();
+    }
+
+    try {
+      const response = await fetch(
+        mode === "register" ? "/api/register" : "/api/login",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Не удалось выполнить запрос");
+      }
+
+      localStorage.setItem(tokenKey, data.token);
+      passwordInput.value = "";
+      showProfile(data.user);
+    } catch (error) {
+      showMessage(error.message || "Ошибка соединения с сервером");
+    } finally {
+      submit.disabled = false;
+    }
+  });
+
+  document.getElementById("accountLogout").onclick = () => {
+    localStorage.removeItem(tokenKey);
+    form.reset();
+    setMode("login");
+    showAuth();
+    showMessage("Вы вышли из аккаунта.");
+  };
+
+  setMode("register");
+  loadProfile();
+})();
+</script>
+</body> 
 </html>
