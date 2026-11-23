@@ -139,6 +139,12 @@ footer {text-align:center;padding:20px;font:16px Georgia,serif;color:var(--muted
 
 <script>
 const tg = window.Telegram.WebApp;
+  window.addEventListener("load", () => {
+  alert(
+    "Авторизация при загрузке: " +
+    (window.Telegram.WebApp.initData ? "ЕСТЬ" : "НЕТ")
+  );
+});
   tg.ready();
 tg.expand();
 
