@@ -126,9 +126,10 @@ app.post("/api/order", async (req, res) => {
     return false;
   }
 }
-      console.error("Ошибка проверки Telegram initData");
-      return res.status(401).json({ error: "Проверка Telegram не пройдена" });
-    }
+    if (!verifyTelegram(initData)) {
+  console.error("Ошибка проверки Telegram initData");
+  return res.status(401).json({ error: "Проверка Telegram не пройдена" });
+}
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Корзина пуста" });
