@@ -95,12 +95,14 @@ textarea {min-height:75px;resize:vertical}
   width:100%;padding:15px;border:0;border-radius:25px;
   background:var(--dark);color:white;font-size:15px;
 }
+.submit:disabled {opacity:.6}
 .note {font-size:11px;color:var(--muted);line-height:1.5}
 .empty {text-align:center;color:var(--muted);padding:25px}
 footer {text-align:center;padding:20px;font:16px Georgia,serif;color:var(--muted)}
 </style>
 </head>
 <body>
+
 <header>
   <div class="logo">Flowers_olia</div>
   <div class="slogan">Цветы, которые сохраняют любовь</div>
@@ -118,7 +120,9 @@ footer {text-align:center;padding:20px;font:16px Georgia,serif;color:var(--muted
   <footer>С любовью, Flowers_olia ♡</footer>
 </main>
 
-<button class="cart-button" id="openCart">🛍 Корзина · <span id="cartCount">0</span></button>
+<button class="cart-button" id="openCart">
+  🛍 Корзина · <span id="cartCount">0</span>
+</button>
 
 <div class="modal" id="modal">
   <div class="panel">
@@ -138,24 +142,12 @@ footer {text-align:center;padding:20px;font:16px Georgia,serif;color:var(--muted
 </div>
 
 <script>
-const tg = window.Telegram.WebApp;
-  window.addEventListener("load", () => {
-  alert(
-    "Авторизация при загрузке: " +
-    (window.Telegram.WebApp.initData ? "ЕСТЬ" : "НЕТ")
-  );
-});
-  tg.ready();
-tg.expand();
+const tg = window.Telegram?.WebApp;
 
-alert(
-  "Telegram WebApp: " + (window.Telegram?.WebApp ? "ЕСТЬ" : "НЕТ") +
-  "\nВерсия: " + (tg?.version || "нет") +
-  "\nПлатформа: " + (tg?.platform || "нет") +
-  "\nДанные авторизации: " + (tg?.initData ? "ПОЛУЧЕНЫ" : "ПУСТО")
-);
-tg?.ready();
-tg?.expand();
+if (tg) {
+  tg.ready();
+  tg.expand();
+}
 
 const products = [
  {id:1,name:"Букет из роз",cat:"Букеты",desc:"Нежные атласные розы ручной работы",img:"https://images.unsplash.com/photo-1494972308805-463bc619d34e?w=600"},
@@ -168,100 +160,177 @@ const products = [
  {id:8,name:"Декоративная упаковка",cat:"Дополнения",desc:"Завершающий штрих вашего подарка",img:"https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600"}
 ];
 
-let activeCategory="Все";
-let cart={};
+let activeCategory = "Все";
+let cart = {};
 
-const categories=["Все","Букеты","Корзины","Коробки","Сладкие композиции","Дополнения"];
+const categories = [
+  "Все","Букеты","Корзины","Коробки",
+  "Сладкие композиции","Дополнения"
+];
 
-function renderCategories(){
- document.getElementById("categories").innerHTML=categories.map(c=>
- `<button class="${c===activeCategory?'active':''}" data-cat="${c}">${c}</button>`
- ).join("");
- document.querySelectorAll("[data-cat]").forEach(b=>{
-  b.onclick=()=>{activeCategory=b.dataset.cat;renderCategories();renderProducts()};
- });
-}
+function renderCategories() {
+  document.getElementById("categories").innerHTML =
+    categories.map(c =>
+      `<button class="${c === activeCategory ? 'active' : ''}" data-cat="${c}">${c}</button>`
+    ).join("");
 
-function renderProducts(){
- const shown=products.filter(p=>activeCategory==="Все"||p.cat===activeCategory);
- document.getElementById("products").innerHTML=shown.map(p=>`
- <article class="product">
-  <img src="${p.img}" alt="${p.name}" loading="lazy" onerror="this.style.display='none'">
-  <div class="product-info">
-   <h3>${p.name}</h3>
-   <p>${p.desc}</p>
-   <div class="price">Цена уточняется</div>
-   <button class="add" data-add="${p.id}">＋ Добавить</button>
-  </div>
- </article>`).join("");
- document.querySelectorAll("[data-add]").forEach(b=>{
-  b.onclick=()=>{const id=Number(b.dataset.add);cart[id]=(cart[id]||0)+1;updateCart();};
- });
-}
-
-function updateCart(){
- const count=Object.values(cart).reduce((a,b)=>a+b,0);
- document.getElementById("cartCount").textContent=count;
- renderCart();
-}
-
-function renderCart(){
- const entries=Object.entries(cart).filter(([id,q])=>q>0);
- document.getElementById("cartItems").innerHTML=entries.length?entries.map(([id,q])=>{
-  const p=products.find(x=>x.id===Number(id));
-  return `<div class="cart-line">
-   <span>${p.name}</span>
-   <div class="quantity">
-    <button data-minus="${id}">−</button>${q}
-    <button data-plus="${id}">＋</button>
-   </div>
-  </div>`;
- }).join(""):'<div class="empty">В корзине пока пусто ♡</div>';
- document.querySelectorAll("[data-minus]").forEach(b=>b.onclick=()=>{const id=b.dataset.minus;cart[id]--;if(cart[id]<=0)delete cart[id];updateCart();});
- document.querySelectorAll("[data-plus]").forEach(b=>b.onclick=()=>{const id=b.dataset.plus;cart[id]++;updateCart();});
-}
-
-document.getElementById("openCart").onclick=()=>{
- document.getElementById("modal").classList.add("open");
- renderCart();
-};
-document.getElementById("closeCart").onclick=()=>document.getElementById("modal").classList.remove("open");
-
-document.getElementById("orderForm").onsubmit=async e=>{
- e.preventDefault();
- const items=Object.entries(cart).filter(([id,q])=>q>0).map(([id,quantity])=>({
-  name:products.find(p=>p.id===Number(id)).name,quantity
- }));
- if(!items.length){document.getElementById("status").textContent="Сначала добавьте товары в корзину.";return;}
- const status=document.getElementById("status");
- const button=e.target.querySelector("button[type=submit]");
-  alert(
-  "Перед отправкой заказа:\n" +
-  "Telegram WebApp: " + (window.Telegram?.WebApp ? "ЕСТЬ" : "НЕТ") +
-  "\nДлина initData: " +
-  (window.Telegram?.WebApp?.initData?.length || 0)
-);
- button.disabled=true;
- status.textContent="Отправляем заказ…";
- try{
-  const response=await fetch("/api/order",{
-   method:"POST",
-   headers:{"Content-Type":"application/json"},
-   body:JSON.stringify({
-    initData:tg?.initData||"",
-    items,
-    customer:document.getElementById("customer").value,
-    phone:document.getElementById("phone").value,
-    comment:document.getElementById("comment").value
-   })
+  document.querySelectorAll("[data-cat]").forEach(b => {
+    b.onclick = () => {
+      activeCategory = b.dataset.cat;
+      renderCategories();
+      renderProducts();
+    };
   });
-  const result=await response.json();
-  if(!response.ok)throw new Error(result.error||"Не удалось отправить заказ");
-  status.textContent="Спасибо! Заказ отправлен. Мы скоро свяжемся с вами ♡";
-  cart={};updateCart();e.target.reset();
- }catch(error){
-  status.textContent=error.message+" Откройте каталог внутри Telegram и попробуйте снова.";
- }finally{button.disabled=false;}
+}
+
+function renderProducts() {
+  const shown = products.filter(p =>
+    activeCategory === "Все" || p.cat === activeCategory
+  );
+
+  document.getElementById("products").innerHTML =
+    shown.map(p => `
+      <article class="product">
+        <img src="${p.img}" alt="${p.name}" loading="lazy" onerror="this.style.display='none'">
+        <div class="product-info">
+          <h3>${p.name}</h3>
+          <p>${p.desc}</p>
+          <div class="price">Цена уточняется</div>
+          <button class="add" data-add="${p.id}">＋ Добавить</button>
+        </div>
+      </article>
+    `).join("");
+
+  document.querySelectorAll("[data-add]").forEach(b => {
+    b.onclick = () => {
+      const id = Number(b.dataset.add);
+      cart[id] = (cart[id] || 0) + 1;
+      updateCart();
+    };
+  });
+}
+
+function updateCart() {
+  const count = Object.values(cart).reduce((a,b) => a+b, 0);
+  document.getElementById("cartCount").textContent = count;
+  renderCart();
+}
+
+function renderCart() {
+  const entries = Object.entries(cart).filter(([id,q]) => q > 0);
+
+  document.getElementById("cartItems").innerHTML =
+    entries.length ? entries.map(([id,q]) => {
+      const p = products.find(x => x.id === Number(id));
+      return `
+        <div class="cart-line">
+          <span>${p.name}</span>
+          <div class="quantity">
+            <button data-minus="${id}">−</button>${q}
+            <button data-plus="${id}">＋</button>
+          </div>
+        </div>
+      `;
+    }).join("") : '<div class="empty">В корзине пока пусто ♡</div>';
+
+  document.querySelectorAll("[data-minus]").forEach(b => {
+    b.onclick = () => {
+      const id = b.dataset.minus;
+      cart[id]--;
+      if (cart[id] <= 0) delete cart[id];
+      updateCart();
+    };
+  });
+
+  document.querySelectorAll("[data-plus]").forEach(b => {
+    b.onclick = () => {
+      const id = b.dataset.plus;
+      cart[id]++;
+      updateCart();
+    };
+  });
+}
+
+document.getElementById("openCart").onclick = () => {
+  document.getElementById("modal").classList.add("open");
+  renderCart();
+};
+
+document.getElementById("closeCart").onclick = () => {
+  document.getElementById("modal").classList.remove("open");
+};
+
+// Отправка заказа
+document.getElementById("orderForm").onsubmit = async e => {
+  e.preventDefault();
+
+  const status = document.getElementById("status");
+  const button = e.target.querySelector("button[type=submit]");
+
+  const items = Object.entries(cart)
+    .filter(([id,q]) => q > 0)
+    .map(([id,quantity]) => ({
+      name: products.find(p => p.id === Number(id)).name,
+      quantity
+    }));
+
+  if (!items.length) {
+    status.textContent = "Сначала добавьте товары в корзину.";
+    return;
+  }
+
+  // Получаем актуальные данные Telegram непосредственно перед отправкой
+  const webApp = window.Telegram?.WebApp;
+  const initData = webApp?.initData || "";
+
+  if (!initData) {
+    status.textContent =
+      "Не получены данные Telegram. Закройте каталог и откройте его через профиль бота.";
+    return;
+  }
+
+  const requestBody = {
+    initData: initData,
+    items: items,
+    customer: document.getElementById("customer").value.trim(),
+    phone: document.getElementById("phone").value.trim(),
+    comment: document.getElementById("comment").value.trim()
+  };
+
+  button.disabled = true;
+  status.textContent = "Отправляем заказ…";
+
+  try {
+    const response = await fetch("/api/order", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Telegram-Init-Data": initData
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || "Не удалось отправить заказ");
+    }
+
+    status.textContent =
+      "Спасибо! Заказ отправлен. Мы скоро свяжемся с вами ♡";
+
+    cart = {};
+    updateCart();
+    e.target.reset();
+
+  } catch (error) {
+    status.textContent =
+      error.message || "Ошибка отправки заказа. Попробуйте ещё раз.";
+  } finally {
+    button.disabled = false;
+  }
 };
 
 renderCategories();
