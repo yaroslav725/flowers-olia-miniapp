@@ -134,4 +134,25 @@ app.get("/", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Flowers_olia запущен на ${PORT}`));
+
+app.listen(PORT, async () => {
+  console.log(`Flowers_olia запущен на ${PORT}`);
+
+  try {
+    const url = `${process.env.WEB_APP_URL.replace(/\/$/, "")}/webhook`;
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url })
+      }
+    );
+
+    const result = await response.json();
+    console.log("Webhook:", result);
+  } catch (error) {
+    console.error("Ошибка подключения webhook:", error);
+  }
+});
