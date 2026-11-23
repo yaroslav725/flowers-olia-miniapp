@@ -5,6 +5,43 @@ const path = require("path");
 
 const app = express();
 app.use(express.json());
+app.post(`/webhook`, async (req, res) => {
+  try {
+    const message = req.body.message;
+
+    if (message && message.text === "/start") {
+      const keyboard = {
+        keyboard: [[
+          {
+            text: "🌸 Открыть каталог",
+            web_app: {
+              url: process.env.WEB_APP_URL
+            }
+          }
+        ]],
+        resize_keyboard: true
+      };
+
+      await fetch(
+        `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: message.chat.id,
+            text: "Добро пожаловать в Flowers_olia! 🌷\nЦветы, которые сохраняют любовь.",
+            reply_markup: keyboard
+          })
+        }
+      );
+    }
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error(error);
+    res.sendStatus(500);
+  }
+});
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ORDERS_CHAT_ID = process.env.ORDERS_CHAT_ID;
