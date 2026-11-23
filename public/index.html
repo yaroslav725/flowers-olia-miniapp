@@ -7,6 +7,7 @@
 <meta name="theme-color" content="#f8edf0">
 <title>Flowers_olia — Цветы, которые сохраняют любовь</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
 <style>
 :root {
   --pink:#d99eae;
@@ -70,6 +71,7 @@ h2 {font:23px Georgia,serif;margin:24px 0 15px}
   position:fixed;bottom:15px;left:16px;right:16px;
   background:var(--dark);color:white;border:0;border-radius:30px;
   padding:16px;font-size:15px;box-shadow:0 5px 20px #593d4630;
+  z-index:4;
 }
 .modal {
   display:none;position:fixed;inset:0;background:#0006;
@@ -99,8 +101,81 @@ textarea {min-height:75px;resize:vertical}
 .note {font-size:11px;color:var(--muted);line-height:1.5}
 .empty {text-align:center;color:var(--muted);padding:25px}
 footer {text-align:center;padding:20px;font:16px Georgia,serif;color:var(--muted)}
+
+.account-section {
+  max-width:440px;
+  margin:35px auto;
+  padding:24px;
+  background:#fff9fa;
+  border:1px solid #f0dce2;
+  border-radius:20px;
+  color:var(--dark);
+}
+.account-section h2 {
+  text-align:center;
+  margin-top:0;
+}
+.account-section input {
+  display:block;
+  width:100%;
+  box-sizing:border-box;
+  padding:13px;
+  margin:12px 0;
+  border:1px solid #e5cbd3;
+  border-radius:10px;
+  font-size:16px;
+}
+.account-section button {
+  padding:12px 16px;
+  border:0;
+  border-radius:10px;
+  background:var(--pink);
+  color:white;
+  font-size:15px;
+  cursor:pointer;
+}
+.account-section .secondary {
+  background:#f0e1e5;
+  color:var(--dark);
+}
+.account-section button:disabled {opacity:.6}
+.account-actions {
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.account-actions button {flex:1}
+.account-message {
+  margin-top:14px;
+  text-align:center;
+  font-size:14px;
+  line-height:1.5;
+}
+.order-card {
+  background:white;
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:14px;
+  margin:12px 0;
+  font-size:13px;
+  line-height:1.6;
+}
+.order-card strong {color:var(--dark)}
+.order-status {
+  display:inline-block;
+  margin-top:8px;
+  padding:5px 10px;
+  border-radius:15px;
+  background:#f4e3e7;
+  color:#654852;
+}
+.history-title {
+  margin-top:28px !important;
+  text-align:left !important;
+}
 </style>
 </head>
+
 <body>
 
 <header>
@@ -117,6 +192,43 @@ footer {text-align:center;padding:20px;font:16px Georgia,serif;color:var(--muted
   <h2>Наш каталог</h2>
   <div class="categories" id="categories"></div>
   <div class="products" id="products"></div>
+
+  <section class="account-section">
+    <h2>🌸 Личный кабинет</h2>
+
+    <div id="accountAuth">
+      <div class="account-actions">
+        <button type="button" id="accountRegisterTab">Регистрация</button>
+        <button type="button" class="secondary" id="accountLoginTab">Вход</button>
+      </div>
+
+      <form id="accountForm">
+        <input id="accountName" placeholder="Ваше имя" maxlength="100" required>
+        <input id="accountPhone" type="tel" placeholder="Номер телефона" required>
+        <input id="accountPassword" type="password" placeholder="Пароль (от 8 символов)" minlength="8" required>
+        <button type="submit" id="accountSubmit" style="width:100%">
+          Зарегистрироваться
+        </button>
+      </form>
+    </div>
+
+    <div id="accountProfile" hidden>
+      <p id="accountWelcome"></p>
+      <p id="accountPhoneView"></p>
+
+      <h2 class="history-title">Мои заказы ♡</h2>
+      <div id="ordersList">
+        <p class="note">Здесь будут отображаться ваши заказы.</p>
+      </div>
+
+      <button type="button" id="accountLogout" class="secondary">
+        Выйти из аккаунта
+      </button>
+    </div>
+
+    <div id="accountMessage" class="account-message"></div>
+  </section>
+
   <footer>С любовью, Flowers_olia ♡</footer>
 </main>
 
@@ -129,7 +241,9 @@ footer {text-align:center;padding:20px;font:16px Georgia,serif;color:var(--muted
     <button class="close" id="closeCart">✕</button>
     <h2>Ваш заказ ♡</h2>
     <div id="cartItems"></div>
+
     <p class="note">Стоимость изделий уточняется индивидуально. Мы свяжемся с вами для подтверждения заказа.</p>
+
     <h2>Контактные данные</h2>
     <form id="orderForm">
       <input id="customer" placeholder="Ваше имя" required maxlength="100">
@@ -148,6 +262,8 @@ if (tg) {
   tg.ready();
   tg.expand();
 }
+
+const TOKEN_KEY = "flowersOliaToken";
 
 const products = [
  {id:1,name:"Букет из роз",cat:"Букеты",desc:"Нежные атласные розы ручной работы",img:"https://images.unsplash.com/photo-1494972308805-463bc619d34e?w=600"},
@@ -226,8 +342,8 @@ function renderCart() {
         <div class="cart-line">
           <span>${p.name}</span>
           <div class="quantity">
-            <button data-minus="${id}">−</button>${q}
-            <button data-plus="${id}">＋</button>
+            <button type="button" data-minus="${id}">−</button>${q}
+            <button type="button" data-plus="${id}">＋</button>
           </div>
         </div>
       `;
@@ -279,14 +395,13 @@ document.getElementById("orderForm").onsubmit = async e => {
     return;
   }
 
-  
-  // Получаем данные Telegram, если каталог открыт внутри Telegram
   const webApp = window.Telegram?.WebApp;
   const initData = webApp?.initData || "";
+  const token = localStorage.getItem(TOKEN_KEY);
 
   const requestBody = {
-    initData: initData,
-    items: items,
+    initData,
+    items,
     customer: document.getElementById("customer").value.trim(),
     phone: document.getElementById("phone").value.trim(),
     comment: document.getElementById("comment").value.trim()
@@ -302,7 +417,8 @@ document.getElementById("orderForm").onsubmit = async e => {
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
-        ...(initData ? { "X-Telegram-Init-Data": initData } : {})
+        ...(initData ? { "X-Telegram-Init-Data": initData } : {}),
+        ...(token ? { "Authorization": "Bearer " + token } : {})
       },
       body: JSON.stringify(requestBody)
     });
@@ -320,6 +436,11 @@ document.getElementById("orderForm").onsubmit = async e => {
     updateCart();
     e.target.reset();
 
+    // Обновляем историю, если покупатель вошёл в аккаунт
+    if (localStorage.getItem(TOKEN_KEY)) {
+      loadOrders();
+    }
+
   } catch (error) {
     status.textContent =
       error.message || "Ошибка отправки заказа. Попробуйте ещё раз.";
@@ -328,99 +449,8 @@ document.getElementById("orderForm").onsubmit = async e => {
   }
 };
 
-renderCategories();
-renderProducts();
-updateCart();
-</script>
-<style>
-.account-section {
-  max-width: 440px;
-  margin: 35px auto;
-  padding: 24px;
-  background: #fff9fa;
-  border: 1px solid #f0dce2;
-  border-radius: 20px;
-  color: #593d46;
-  font-family: Arial, sans-serif;
-}
-.account-section h2 {
-  text-align: center;
-  margin-top: 0;
-}
-.account-section input {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 13px;
-  margin: 12px 0;
-  border: 1px solid #e5cbd3;
-  border-radius: 10px;
-  font-size: 16px;
-}
-.account-section button {
-  padding: 12px 16px;
-  border: 0;
-  border-radius: 10px;
-  background: #d99eae;
-  color: white;
-  font-size: 15px;
-  cursor: pointer;
-}
-.account-section .secondary {
-  background: #f0e1e5;
-  color: #593d46;
-}
-.account-section button:disabled {
-  opacity: .6;
-}
-.account-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.account-actions button {
-  flex: 1;
-}
-.account-message {
-  margin-top: 14px;
-  text-align: center;
-  font-size: 14px;
-}
-</style>
-
-<section class="account-section">
-  <h2>🌸 Личный кабинет</h2>
-
-  <div id="accountAuth">
-    <div class="account-actions">
-      <button type="button" id="accountRegisterTab">Регистрация</button>
-      <button type="button" class="secondary" id="accountLoginTab">Вход</button>
-    </div>
-
-    <form id="accountForm">
-      <input id="accountName" placeholder="Ваше имя" maxlength="100" required>
-      <input id="accountPhone" type="tel" placeholder="Номер телефона" required>
-      <input id="accountPassword" type="password" placeholder="Пароль (от 8 символов)" minlength="8" required>
-      <button type="submit" id="accountSubmit" style="width:100%">
-        Зарегистрироваться
-      </button>
-    </form>
-  </div>
-
-  <div id="accountProfile" hidden>
-    <p id="accountWelcome"></p>
-    <p id="accountPhoneView"></p>
-    <button type="button" id="accountLogout" class="secondary">
-      Выйти из аккаунта
-    </button>
-  </div>
-
-  <div id="accountMessage" class="account-message"></div>
-</section>
-
-<script>
+// Личный кабинет
 (() => {
-  const tokenKey = "flowersOliaToken";
   const auth = document.getElementById("accountAuth");
   const profile = document.getElementById("accountProfile");
   const form = document.getElementById("accountForm");
@@ -440,21 +470,29 @@ updateCart();
     mode = newMode;
     nameInput.hidden = mode !== "register";
     nameInput.required = mode === "register";
-    submit.textContent = mode === "register" ? "Зарегистрироваться" : "Войти";
+    submit.textContent =
+      mode === "register" ? "Зарегистрироваться" : "Войти";
     showMessage("");
   }
 
-  document.getElementById("accountRegisterTab").onclick = () => setMode("register");
-  document.getElementById("accountLoginTab").onclick = () => setMode("login");
+  document.getElementById("accountRegisterTab").onclick =
+    () => setMode("register");
+
+  document.getElementById("accountLoginTab").onclick =
+    () => setMode("login");
 
   function showProfile(user) {
     auth.hidden = true;
     profile.hidden = false;
+
     document.getElementById("accountWelcome").textContent =
       "Здравствуйте, " + user.name + "!";
+
     document.getElementById("accountPhoneView").textContent =
       "Телефон: " + user.phone;
+
     showMessage("");
+    loadOrders();
   }
 
   function showAuth() {
@@ -463,19 +501,21 @@ updateCart();
   }
 
   async function loadProfile() {
-    const token = localStorage.getItem(tokenKey);
+    const token = localStorage.getItem(TOKEN_KEY);
     if (!token) return;
 
     try {
       const response = await fetch("/api/me", {
-        headers: { Authorization: "Bearer " + token }
+        headers: { Authorization: "Bearer " + token },
+        cache: "no-store"
       });
+
       const data = await response.json();
 
       if (response.ok && data.success) {
         showProfile(data.user);
       } else {
-        localStorage.removeItem(tokenKey);
+        localStorage.removeItem(TOKEN_KEY);
         showAuth();
       }
     } catch (error) {
@@ -483,8 +523,9 @@ updateCart();
     }
   }
 
-  form.addEventListener("submit", async (event) => {
+  form.addEventListener("submit", async event => {
     event.preventDefault();
+
     submit.disabled = true;
     showMessage("Подождите...");
 
@@ -513,9 +554,10 @@ updateCart();
         throw new Error(data.error || "Не удалось выполнить запрос");
       }
 
-      localStorage.setItem(tokenKey, data.token);
+      localStorage.setItem(TOKEN_KEY, data.token);
       passwordInput.value = "";
       showProfile(data.user);
+
     } catch (error) {
       showMessage(error.message || "Ошибка соединения с сервером");
     } finally {
@@ -524,16 +566,105 @@ updateCart();
   });
 
   document.getElementById("accountLogout").onclick = () => {
-    localStorage.removeItem(tokenKey);
+    localStorage.removeItem(TOKEN_KEY);
     form.reset();
     setMode("login");
     showAuth();
+
+    document.getElementById("ordersList").innerHTML =
+      '<p class="note">Войдите, чтобы увидеть свои заказы.</p>';
+
     showMessage("Вы вышли из аккаунта.");
   };
 
   setMode("register");
   loadProfile();
 })();
+
+// Загрузка истории заказов
+async function loadOrders() {
+  const list = document.getElementById("ordersList");
+  const token = localStorage.getItem(TOKEN_KEY);
+
+  if (!token) {
+    list.textContent = "Войдите в аккаунт, чтобы увидеть заказы.";
+    return;
+  }
+
+  list.textContent = "Загружаем ваши заказы…";
+
+  try {
+    const response = await fetch("/api/orders", {
+      headers: {
+        Authorization: "Bearer " + token
+      },
+      cache: "no-store"
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Не удалось загрузить заказы");
+    }
+
+    if (!data.orders || data.orders.length === 0) {
+      list.textContent = "Пока у вас нет заказов ♡";
+      return;
+    }
+
+    // Сначала новые заказы
+    data.orders.sort((a, b) => {
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    });
+
+    list.innerHTML = "";
+
+    data.orders.forEach(order => {
+      const card = document.createElement("div");
+      card.className = "order-card";
+
+      const heading = document.createElement("strong");
+      heading.textContent = "Заказ № " + order.id;
+      card.appendChild(heading);
+
+      const date = document.createElement("p");
+      date.textContent = order.createdAt
+        ? "Дата: " + new Date(order.createdAt).toLocaleString("ru-RU")
+        : "Дата: обрабатывается";
+      card.appendChild(date);
+
+      const itemsTitle = document.createElement("strong");
+      itemsTitle.textContent = "Состав заказа:";
+      card.appendChild(itemsTitle);
+
+      const itemsList = document.createElement("ul");
+
+      (order.items || []).forEach(item => {
+        const li = document.createElement("li");
+        li.textContent = item.name + " × " + item.quantity;
+        itemsList.appendChild(li);
+      });
+
+      card.appendChild(itemsList);
+
+      const status = document.createElement("span");
+      status.className = "order-status";
+      status.textContent = "Статус: " + (order.status || "Новый");
+      card.appendChild(status);
+
+      list.appendChild(card);
+    });
+
+  } catch (error) {
+    list.textContent = error.message ||
+      "Не удалось загрузить историю заказов.";
+  }
+}
+
+renderCategories();
+renderProducts();
+updateCart();
 </script>
-</body> 
+
+</body>
 </html>
