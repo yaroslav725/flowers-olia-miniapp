@@ -83,6 +83,7 @@ app.post("/api/order", async (req, res) => {
     const { initData, items, customer, phone, comment } = req.body;
 
     if (!verifyTelegram(initData)) {
+      console.error("Ошибка проверки Telegram initData");
       return res.status(401).json({ error: "Проверка Telegram не пройдена" });
     }
 
