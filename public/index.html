@@ -235,6 +235,12 @@ document.getElementById("orderForm").onsubmit=async e=>{
  if(!items.length){document.getElementById("status").textContent="Сначала добавьте товары в корзину.";return;}
  const status=document.getElementById("status");
  const button=e.target.querySelector("button[type=submit]");
+  alert(
+  "Перед отправкой заказа:\n" +
+  "Telegram WebApp: " + (window.Telegram?.WebApp ? "ЕСТЬ" : "НЕТ") +
+  "\nДлина initData: " +
+  (window.Telegram?.WebApp?.initData?.length || 0)
+);
  button.disabled=true;
  status.textContent="Отправляем заказ…";
  try{
