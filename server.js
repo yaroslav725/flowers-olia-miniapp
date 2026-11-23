@@ -349,10 +349,35 @@ app.post("/webhook", async (req, res) => {
     res.sendStatus(500);
   }
 });
-
-// Приём заказов
+// Приём и сохранение заказов
 app.post("/api/order", async (req, res) => {
   try {
+    if (!db) {
+      return res.status(503).json({
+        error: "База данных временно недоступна"
+      });
+    }
+
+    // Проверяем аккаунт, если покупатель вошёл
+    let userPhone = null;
+
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : "";
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        userPhone = decoded.phone;
+      } catch (error) {
+        return res.status(401).json({
+          error: "Сессия закончилась. Войдите снова."
+        });
+      }
+    }
+
+    // Проверяем Telegram, если заказ оформляется из Telegram
     const bodyInitData = req.body?.initData;
     const headerInitData = req.get("X-Telegram-Init-Data") || "";
     const initData = headerInitData || bodyInitData || "";
@@ -371,24 +396,50 @@ app.post("/api/order", async (req, res) => {
       });
     }
 
+    const safeItems = items.slice(0, 30).map(item => ({
+      name: String(item.name || "Товар").slice(0, 100),
+      quantity: Math.max(
+        1,
+        Math.min(99, Number(item.quantity) || 1)
+      )
+    }));
+
+    const order = {
+      userPhone,
+      customer: String(customer || "Не указано").slice(0, 100),
+      phone: String(phone || "Не указан").slice(0, 50),
+      comment: String(comment || "").slice(0, 500),
+      items: safeItems,
+      status: "Новый",
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    // Сохраняем заказ в Firebase
+    const orderRef = await db.collection("orders").add(order);
+
+    // Отправляем уведомление в Telegram
     if (!ORDERS_CHAT_ID || !BOT_TOKEN) {
+      console.error("Не настроена группа для заказов");
+
       return res.status(500).json({
-        error: "Не настроена группа для заказов"
+        error: "Заказ сохранён, но уведомление не отправлено"
       });
     }
 
-    const text = [
+    const telegramText = [
       "🌸 НОВЫЙ ЗАКАЗ — Flowers_olia",
       "",
-      `👤 Имя: ${String(customer || "Не указано").slice(0, 100)}`,
-      `📞 Телефон: ${String(phone || "Не указан").slice(0, 50)}`,
+      `👤 Имя: ${order.customer}`,
+      `📞 Телефон: ${order.phone}`,
+      `🆔 Заказ: ${orderRef.id}`,
+      `👤 Аккаунт: ${userPhone || "Гость"}`,
       "",
       "🛍 Заказ:",
-      ...items.slice(0, 30).map(item =>
-        `• ${String(item.name || "Товар").slice(0, 100)} × ${Math.max(1, Math.min(99, Number(item.quantity) || 1))}`
+      ...safeItems.map(item =>
+        `• ${item.name} × ${item.quantity}`
       ),
       "",
-      `💌 Комментарий: ${String(comment || "Нет").slice(0, 500)}`
+      `💌 Комментарий: ${order.comment || "Нет"}`
     ].join("\n");
 
     const response = await fetch(
@@ -398,7 +449,7 @@ app.post("/api/order", async (req, res) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: ORDERS_CHAT_ID,
-          text
+          text: telegramText
         })
       }
     );
@@ -406,55 +457,63 @@ app.post("/api/order", async (req, res) => {
     const result = await response.json();
 
     if (!result.ok) {
-      console.error("Telegram не принял заказ:", result.description);
+      console.error("Ошибка Telegram:", result.description);
 
       return res.status(502).json({
-        error: "Telegram не принял заказ"
+        error: "Заказ сохранён, но Telegram не принял уведомление"
       });
     }
 
-    return res.json({ success: true });
+    return res.json({
+      success: true,
+      orderId: orderRef.id
+    });
 
   } catch (error) {
     console.error("Ошибка обработки заказа:", error.message);
 
     return res.status(500).json({
-      error: "Ошибка сервера"
+      error: "Не удалось обработать заказ"
     });
   }
 });
 
-// Главная страница
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// Запуск сервера
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, async () => {
-  console.log(`Flowers_olia запущен на ${PORT}`);
-
-  if (!BOT_TOKEN || !WEB_APP_URL) {
-    console.error("Не настроен BOT_TOKEN или WEB_APP_URL");
-    return;
-  }
-
+// Получение истории заказов пользователя
+app.get("/api/orders", requireAuth, async (req, res) => {
   try {
-    const url = `${WEB_APP_URL.replace(/\/$/, "")}/webhook`;
+    const snapshot = await db
+      .collection("orders")
+      .where("userPhone", "==", req.user.phone)
+      .orderBy("createdAt", "desc")
+      .limit(50)
+      .get();
 
-    const response = await fetch(
-      `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url })
-      }
-    );
+    const orders = snapshot.docs.map(doc => {
+      const data = doc.data();
 
-    console.log("Webhook:", await response.json());
+      return {
+        id: doc.id,
+        customer: data.customer,
+        phone: data.phone,
+        items: data.items,
+        comment: data.comment,
+        status: data.status,
+        createdAt: data.createdAt
+          ? data.createdAt.toDate().toISOString()
+          : null
+      };
+    });
+
+    return res.json({
+      success: true,
+      orders
+    });
 
   } catch (error) {
-    console.error("Ошибка webhook:", error.message);
+    console.error("Ошибка истории заказов:", error.message);
+
+    return res.status(500).json({
+      error: "Не удалось загрузить историю заказов"
+    });
   }
 });
