@@ -4,88 +4,23 @@ const crypto = require("crypto");
 const path = require("path");
 
 const app = express();
-app.use(express.json());
-app.post(`/webhook`, async (req, res) => {
-  try {
-    const message = req.body.message;
-
-    if (message && message.text === "/start") {
-      const keyboard = {
-        keyboard: [[
-          {
-            text: "🌸 Открыть каталог",
-            web_app: {
-              url: process.env.WEB_APP_URL
-            }
-          }
-        ]],
-        resize_keyboard: true
-      };
-
-      await fetch(
-        `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: message.chat.id,
-            text: "Добро пожаловать в Flowers_olia! 🌷\nЦветы, которые сохраняют любовь.",
-            reply_markup: keyboard
-          })
-        }
-      );
-    }
-
-    res.sendStatus(200);
-  } catch (error) {
-    console.error(error);
-    res.sendStatus(500);
-  }
-});
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ORDERS_CHAT_ID = process.env.ORDERS_CHAT_ID;
+const WEB_APP_URL = process.env.WEB_APP_URL;
 
+app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
+// Проверка авторизации Telegram
 function verifyTelegram(initData) {
-  if (!BOT_TOKEN || !initData) return false;
+  if (!BOT_TOKEN) {
+    console.error("ОШИБКА: BOT_TOKEN не найден в Environment");
+    return false;
+  }
 
-  const params = new URLSearchParams(initData);
-  const hash = params.get("hash");
-  if (!hash) return false;
-
-  params.delete("hash");
-
-  const dataCheckString = [...params.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n");
-
-  const secret = crypto
-    .createHmac("sha256", "WebAppData")
-    .update(BOT_TOKEN)
-    .digest();
-
-  const calculatedHash = crypto
-    .createHmac("sha256", secret)
-    .update(dataCheckString)
-    .digest("hex");
-
-  return crypto.timingSafeEqual(
-    Buffer.from(hash, "hex"),
-    Buffer.from(calculatedHash, "hex")
-  );
-}
-
-app.post("/api/order", async (req, res) => {
-  console.log("ПОЛУЧЕН ЗАПРОС НА ЗАКАЗ");
-  try {
-    const { initData, items, customer, phone, comment } = req.body;
-
-    function verifyTelegram(initData) {
-  if (!BOT_TOKEN || !initData) {
-    console.error("Нет BOT_TOKEN или initData");
+  if (!initData || typeof initData !== "string") {
+    console.error("ОШИБКА: initData не получен");
     return false;
   }
 
@@ -94,7 +29,7 @@ app.post("/api/order", async (req, res) => {
     const hash = params.get("hash");
 
     if (!hash || !/^[a-f0-9]{64}$/i.test(hash)) {
-      console.error("Некорректный hash Telegram");
+      console.error("ОШИБКА: некорректный hash");
       return false;
     }
 
@@ -118,21 +53,83 @@ app.post("/api/order", async (req, res) => {
     const received = Buffer.from(hash, "hex");
     const calculated = Buffer.from(calculatedHash, "hex");
 
-    return received.length === calculated.length &&
-      crypto.timingSafeEqual(received, calculated);
+    if (received.length !== calculated.length) {
+      console.error("ОШИБКА: длина hash не совпадает");
+      return false;
+    }
+
+    return crypto.timingSafeEqual(received, calculated);
 
   } catch (error) {
-    console.error("Ошибка проверки initData:", error.message);
+    console.error("Ошибка проверки Telegram:", error.message);
     return false;
   }
 }
+
+// Команда /start
+app.post("/webhook", async (req, res) => {
+  try {
+    const message = req.body.message;
+
+    if (message && message.text === "/start") {
+      const keyboard = {
+        keyboard: [[
+          {
+            text: "🌸 Открыть каталог",
+            web_app: { url: WEB_APP_URL }
+          }
+        ]],
+        resize_keyboard: true
+      };
+
+      const response = await fetch(
+        `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: message.chat.id,
+            text: "Добро пожаловать в Flowers_olia! 🌷\nЦветы, которые сохраняют любовь.",
+            reply_markup: keyboard
+          })
+        }
+      );
+
+      const result = await response.json();
+      if (!result.ok) console.error("Ошибка /start:", result.description);
+    }
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Ошибка webhook:", error.message);
+    res.sendStatus(500);
+  }
+});
+
+// Приём заказов
+app.post("/api/order", async (req, res) => {
+  console.log("ПОЛУЧЕН ЗАПРОС НА ЗАКАЗ");
+
+  try {
+    const { initData, items, customer, phone, comment } = req.body;
+
+    console.log("BOT_TOKEN настроен:", Boolean(BOT_TOKEN));
+    console.log("Длина initData:", typeof initData === "string" ? initData.length : 0);
+
     if (!verifyTelegram(initData)) {
-  console.error("Ошибка проверки Telegram initData");
-  return res.status(401).json({ error: "Проверка Telegram не пройдена" });
-}
+      console.error("Ошибка проверки Telegram initData");
+      return res.status(401).json({
+        error: "Не удалось подтвердить авторизацию Telegram. Откройте каталог через профиль бота."
+      });
+    }
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Корзина пуста" });
+    }
+
+    if (!ORDERS_CHAT_ID) {
+      console.error("ORDERS_CHAT_ID не настроен");
+      return res.status(500).json({ error: "Не настроен чат для заказов" });
     }
 
     const text = [
@@ -164,12 +161,15 @@ app.post("/api/order", async (req, res) => {
     const result = await response.json();
 
     if (!result.ok) {
+      console.error("Telegram не принял заказ:", result.description);
       return res.status(502).json({ error: "Telegram не принял заказ" });
     }
 
+    console.log("ЗАКАЗ УСПЕШНО ОТПРАВЛЕН");
     res.json({ success: true });
+
   } catch (error) {
-    console.error(error);
+    console.error("Ошибка обработки заказа:", error.message);
     res.status(500).json({ error: "Ошибка сервера" });
   }
 });
@@ -183,8 +183,13 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`Flowers_olia запущен на ${PORT}`);
 
+  if (!BOT_TOKEN || !WEB_APP_URL) {
+    console.error("Не настроен BOT_TOKEN или WEB_APP_URL");
+    return;
+  }
+
   try {
-    const url = `${process.env.WEB_APP_URL.replace(/\/$/, "")}/webhook`;
+    const url = `${WEB_APP_URL.replace(/\/$/, "")}/webhook`;
 
     const response = await fetch(
       `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`,
@@ -197,7 +202,8 @@ app.listen(PORT, async () => {
 
     const result = await response.json();
     console.log("Webhook:", result);
+
   } catch (error) {
-    console.error("Ошибка подключения webhook:", error);
+    console.error("Ошибка подключения webhook:", error.message);
   }
 });
