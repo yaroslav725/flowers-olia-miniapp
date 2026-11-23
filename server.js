@@ -79,6 +79,7 @@ function verifyTelegram(initData) {
 }
 
 app.post("/api/order", async (req, res) => {
+  console.log("ПОЛУЧЕН ЗАПРОС НА ЗАКАЗ");
   try {
     const { initData, items, customer, phone, comment } = req.body;
 
