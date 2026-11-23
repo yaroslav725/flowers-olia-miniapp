@@ -10,17 +10,18 @@ const ORDERS_CHAT_ID = process.env.ORDERS_CHAT_ID;
 const WEB_APP_URL = process.env.WEB_APP_URL;
 
 app.use(express.json({ limit: "1mb" }));
+
 app.use(express.static(path.join(__dirname, "public")));
 
-// Проверка авторизации Telegram
+// Проверка подлинности Telegram
 function verifyTelegram(initData) {
   if (!BOT_TOKEN) {
-    console.error("ОШИБКА: BOT_TOKEN не найден в Environment");
+    console.error("BOT_TOKEN не настроен");
     return false;
   }
 
   if (!initData || typeof initData !== "string") {
-    console.error("ОШИБКА: initData не получен");
+    console.error("initData не получен");
     return false;
   }
 
@@ -29,7 +30,7 @@ function verifyTelegram(initData) {
     const hash = params.get("hash");
 
     if (!hash || !/^[a-f0-9]{64}$/i.test(hash)) {
-      console.error("ОШИБКА: некорректный hash");
+      console.error("Некорректный hash Telegram");
       return false;
     }
 
@@ -54,7 +55,7 @@ function verifyTelegram(initData) {
     const calculated = Buffer.from(calculatedHash, "hex");
 
     if (received.length !== calculated.length) {
-      console.error("ОШИБКА: длина hash не совпадает");
+      console.error("Размер hash не совпадает");
       return false;
     }
 
@@ -72,11 +73,18 @@ app.post("/webhook", async (req, res) => {
     const message = req.body.message;
 
     if (message && message.text === "/start") {
+      if (!BOT_TOKEN || !WEB_APP_URL) {
+        console.error("Не настроен BOT_TOKEN или WEB_APP_URL");
+        return res.sendStatus(200);
+      }
+
       const keyboard = {
         keyboard: [[
           {
             text: "🌸 Открыть каталог",
-            web_app: { url: WEB_APP_URL }
+            web_app: {
+              url: WEB_APP_URL
+            }
           }
         ]],
         resize_keyboard: true
@@ -96,10 +104,14 @@ app.post("/webhook", async (req, res) => {
       );
 
       const result = await response.json();
-      if (!result.ok) console.error("Ошибка /start:", result.description);
+
+      if (!result.ok) {
+        console.error("Ошибка /start:", result.description);
+      }
     }
 
     res.sendStatus(200);
+
   } catch (error) {
     console.error("Ошибка webhook:", error.message);
     res.sendStatus(500);
@@ -111,25 +123,42 @@ app.post("/api/order", async (req, res) => {
   console.log("ПОЛУЧЕН ЗАПРОС НА ЗАКАЗ");
 
   try {
-    const { initData, items, customer, phone, comment } = req.body;
+    const bodyInitData = req.body?.initData;
+    const headerInitData = req.get("X-Telegram-Init-Data");
+
+    // Приоритет у заголовка, резервный вариант — тело запроса
+    const initData = headerInitData || bodyInitData || "";
 
     console.log("BOT_TOKEN настроен:", Boolean(BOT_TOKEN));
-    console.log("Длина initData:", typeof initData === "string" ? initData.length : 0);
+    console.log("Длина initData из заголовка:",
+      typeof headerInitData === "string" ? headerInitData.length : 0
+    );
+    console.log("Длина initData из тела:",
+      typeof bodyInitData === "string" ? bodyInitData.length : 0
+    );
 
     if (!verifyTelegram(initData)) {
       console.error("Ошибка проверки Telegram initData");
+
       return res.status(401).json({
         error: "Не удалось подтвердить авторизацию Telegram. Откройте каталог через профиль бота."
       });
     }
 
+    const { items, customer, phone, comment } = req.body;
+
     if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: "Корзина пуста" });
+      return res.status(400).json({
+        error: "Корзина пуста"
+      });
     }
 
     if (!ORDERS_CHAT_ID) {
       console.error("ORDERS_CHAT_ID не настроен");
-      return res.status(500).json({ error: "Не настроен чат для заказов" });
+
+      return res.status(500).json({
+        error: "Не настроена группа для заказов"
+      });
     }
 
     const text = [
@@ -153,7 +182,7 @@ app.post("/api/order", async (req, res) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: ORDERS_CHAT_ID,
-          text
+          text: text
         })
       }
     );
@@ -162,22 +191,33 @@ app.post("/api/order", async (req, res) => {
 
     if (!result.ok) {
       console.error("Telegram не принял заказ:", result.description);
-      return res.status(502).json({ error: "Telegram не принял заказ" });
+
+      return res.status(502).json({
+        error: "Telegram не принял заказ. Проверьте настройки группы."
+      });
     }
 
     console.log("ЗАКАЗ УСПЕШНО ОТПРАВЛЕН");
-    res.json({ success: true });
+
+    return res.json({
+      success: true
+    });
 
   } catch (error) {
     console.error("Ошибка обработки заказа:", error.message);
-    res.status(500).json({ error: "Ошибка сервера" });
+
+    return res.status(500).json({
+      error: "Ошибка сервера"
+    });
   }
 });
 
+// Главная страница
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// Запуск сервера
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
@@ -201,6 +241,7 @@ app.listen(PORT, async () => {
     );
 
     const result = await response.json();
+
     console.log("Webhook:", result);
 
   } catch (error) {
