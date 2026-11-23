@@ -2,26 +2,266 @@
 const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
+const admin = require("firebase-admin");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 const app = express();
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ORDERS_CHAT_ID = process.env.ORDERS_CHAT_ID;
 const WEB_APP_URL = process.env.WEB_APP_URL;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 app.use(express.json({ limit: "1mb" }));
-
 app.use(express.static(path.join(__dirname, "public")));
 
-// Проверка подлинности Telegram
-function verifyTelegram(initData) {
-  if (!BOT_TOKEN) {
-    console.error("BOT_TOKEN не настроен");
+// Подключение Firebase
+let db = null;
+
+try {
+  const serviceAccount = JSON.parse(
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+  );
+
+  if (serviceAccount.private_key) {
+    serviceAccount.private_key =
+      serviceAccount.private_key.replace(/\\n/g, "\n");
+  }
+
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+
+  db = admin.firestore();
+
+  console.log("Firebase успешно подключён");
+} catch (error) {
+  console.error("Ошибка подключения Firebase:", error.message);
+}
+
+// Проверка готовности авторизации
+function authReady(res) {
+  if (!db || !JWT_SECRET) {
+    res.status(503).json({
+      error: "Авторизация временно недоступна"
+    });
     return false;
   }
 
-  if (!initData || typeof initData !== "string") {
-    console.error("initData не получен");
+  return true;
+}
+
+// Нормализация российского номера телефона
+function normalizePhone(value) {
+  let phone = String(value || "").replace(/[^\d+]/g, "");
+
+  if (/^8\d{10}$/.test(phone)) {
+    phone = "+7" + phone.slice(1);
+  } else if (/^7\d{10}$/.test(phone)) {
+    phone = "+" + phone;
+  } else if (/^\d{10}$/.test(phone)) {
+    phone = "+7" + phone;
+  }
+
+  if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+    return null;
+  }
+
+  return phone;
+}
+
+// Создание токена авторизации
+function createToken(phone) {
+  return jwt.sign(
+    { phone },
+    JWT_SECRET,
+    { expiresIn: "30d" }
+  );
+}
+
+// Проверка токена
+function requireAuth(req, res, next) {
+  if (!authReady(res)) return;
+
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ")
+    ? header.slice(7)
+    : "";
+
+  if (!token) {
+    return res.status(401).json({
+      error: "Необходимо войти в аккаунт"
+    });
+  }
+
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      error: "Сессия закончилась. Войдите снова."
+    });
+  }
+}
+
+// Регистрация
+app.post("/api/register", async (req, res) => {
+  if (!authReady(res)) return;
+
+  try {
+    const name = String(req.body.name || "").trim();
+    const phone = normalizePhone(req.body.phone);
+    const password = String(req.body.password || "");
+
+    if (name.length < 2 || name.length > 100) {
+      return res.status(400).json({
+        error: "Введите имя от 2 до 100 символов"
+      });
+    }
+
+    if (!phone) {
+      return res.status(400).json({
+        error: "Введите корректный номер телефона"
+      });
+    }
+
+    if (password.length < 8 || Buffer.byteLength(password, "utf8") > 72) {
+      return res.status(400).json({
+        error: "Пароль должен содержать от 8 символов"
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const userRef = db.collection("users").doc(phone);
+
+    try {
+      await userRef.create({
+        name,
+        phone,
+        passwordHash,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (error) {
+      if (error.code === 6 || error.code === "already-exists") {
+        return res.status(409).json({
+          error: "Этот номер уже зарегистрирован"
+        });
+      }
+
+      throw error;
+    }
+
+    const token = createToken(phone);
+
+    return res.json({
+      success: true,
+      token,
+      user: { name, phone }
+    });
+
+  } catch (error) {
+    console.error("Ошибка регистрации:", error.message);
+
+    return res.status(500).json({
+      error: "Не удалось создать аккаунт"
+    });
+  }
+});
+
+// Вход
+app.post("/api/login", async (req, res) => {
+  if (!authReady(res)) return;
+
+  try {
+    const phone = normalizePhone(req.body.phone);
+    const password = String(req.body.password || "");
+
+    if (!phone || !password) {
+      return res.status(400).json({
+        error: "Введите телефон и пароль"
+      });
+    }
+
+    const userRef = db.collection("users").doc(phone);
+    const snapshot = await userRef.get();
+
+    if (!snapshot.exists) {
+      return res.status(401).json({
+        error: "Неверный телефон или пароль"
+      });
+    }
+
+    const user = snapshot.data();
+
+    const passwordMatches = await bcrypt.compare(
+      password,
+      user.passwordHash
+    );
+
+    if (!passwordMatches) {
+      return res.status(401).json({
+        error: "Неверный телефон или пароль"
+      });
+    }
+
+    const token = createToken(phone);
+
+    return res.json({
+      success: true,
+      token,
+      user: {
+        name: user.name,
+        phone: user.phone
+      }
+    });
+
+  } catch (error) {
+    console.error("Ошибка входа:", error.message);
+
+    return res.status(500).json({
+      error: "Не удалось выполнить вход"
+    });
+  }
+});
+
+// Информация о текущем пользователе
+app.get("/api/me", requireAuth, async (req, res) => {
+  try {
+    const snapshot = await db
+      .collection("users")
+      .doc(req.user.phone)
+      .get();
+
+    if (!snapshot.exists) {
+      return res.status(404).json({
+        error: "Аккаунт не найден"
+      });
+    }
+
+    const user = snapshot.data();
+
+    return res.json({
+      success: true,
+      user: {
+        name: user.name,
+        phone: user.phone
+      }
+    });
+
+  } catch (error) {
+    console.error("Ошибка получения профиля:", error.message);
+
+    return res.status(500).json({
+      error: "Не удалось загрузить профиль"
+    });
+  }
+});
+
+// Проверка подлинности Telegram
+function verifyTelegram(initData) {
+  if (!BOT_TOKEN || !initData || typeof initData !== "string") {
     return false;
   }
 
@@ -30,7 +270,6 @@ function verifyTelegram(initData) {
     const hash = params.get("hash");
 
     if (!hash || !/^[a-f0-9]{64}$/i.test(hash)) {
-      console.error("Некорректный hash Telegram");
       return false;
     }
 
@@ -54,12 +293,8 @@ function verifyTelegram(initData) {
     const received = Buffer.from(hash, "hex");
     const calculated = Buffer.from(calculatedHash, "hex");
 
-    if (received.length !== calculated.length) {
-      console.error("Размер hash не совпадает");
-      return false;
-    }
-
-    return crypto.timingSafeEqual(received, calculated);
+    return received.length === calculated.length &&
+      crypto.timingSafeEqual(received, calculated);
 
   } catch (error) {
     console.error("Ошибка проверки Telegram:", error.message);
@@ -74,7 +309,6 @@ app.post("/webhook", async (req, res) => {
 
     if (message && message.text === "/start") {
       if (!BOT_TOKEN || !WEB_APP_URL) {
-        console.error("Не настроен BOT_TOKEN или WEB_APP_URL");
         return res.sendStatus(200);
       }
 
@@ -82,9 +316,7 @@ app.post("/webhook", async (req, res) => {
         keyboard: [[
           {
             text: "🌸 Открыть каталог",
-            web_app: {
-              url: WEB_APP_URL
-            }
+            web_app: { url: WEB_APP_URL }
           }
         ]],
         resize_keyboard: true
@@ -120,26 +352,16 @@ app.post("/webhook", async (req, res) => {
 
 // Приём заказов
 app.post("/api/order", async (req, res) => {
-  console.log("ПОЛУЧЕН ЗАПРОС НА ЗАКАЗ");
-
   try {
-  
-const bodyInitData = req.body?.initData;
-const headerInitData = req.get("X-Telegram-Init-Data") || "";
-const initData = headerInitData || bodyInitData || "";
+    const bodyInitData = req.body?.initData;
+    const headerInitData = req.get("X-Telegram-Init-Data") || "";
+    const initData = headerInitData || bodyInitData || "";
 
-if (initData) {
-  if (!verifyTelegram(initData)) {
-    console.error("Ошибка проверки Telegram initData");
-
-    return res.status(401).json({
-      error: "Не удалось подтвердить авторизацию Telegram."
-    });
-  }
-} else {
-  console.log("Заказ оформляется через обычный браузер");
-}
-  
+    if (initData && !verifyTelegram(initData)) {
+      return res.status(401).json({
+        error: "Не удалось подтвердить авторизацию Telegram."
+      });
+    }
 
     const { items, customer, phone, comment } = req.body;
 
@@ -149,9 +371,7 @@ if (initData) {
       });
     }
 
-    if (!ORDERS_CHAT_ID) {
-      console.error("ORDERS_CHAT_ID не настроен");
-
+    if (!ORDERS_CHAT_ID || !BOT_TOKEN) {
       return res.status(500).json({
         error: "Не настроена группа для заказов"
       });
@@ -178,7 +398,7 @@ if (initData) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chat_id: ORDERS_CHAT_ID,
-          text: text
+          text
         })
       }
     );
@@ -189,15 +409,11 @@ if (initData) {
       console.error("Telegram не принял заказ:", result.description);
 
       return res.status(502).json({
-        error: "Telegram не принял заказ. Проверьте настройки группы."
+        error: "Telegram не принял заказ"
       });
     }
 
-    console.log("ЗАКАЗ УСПЕШНО ОТПРАВЛЕН");
-
-    return res.json({
-      success: true
-    });
+    return res.json({ success: true });
 
   } catch (error) {
     console.error("Ошибка обработки заказа:", error.message);
@@ -236,11 +452,9 @@ app.listen(PORT, async () => {
       }
     );
 
-    const result = await response.json();
-
-    console.log("Webhook:", result);
+    console.log("Webhook:", await response.json());
 
   } catch (error) {
-    console.error("Ошибка подключения webhook:", error.message);
+    console.error("Ошибка webhook:", error.message);
   }
 });
