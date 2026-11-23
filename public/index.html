@@ -1,0 +1,251 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f8edf0">
+<title>Flowers_olia — Цветы, которые сохраняют любовь</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root {
+  --pink:#d99eae;
+  --dark:#593d46;
+  --cream:#fffaf7;
+  --muted:#987e84;
+  --line:#f0dfe3;
+}
+* {box-sizing:border-box}
+body {
+  margin:0;
+  background:var(--cream);
+  color:var(--dark);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+header {
+  padding:27px 20px 20px;
+  text-align:center;
+  background:linear-gradient(145deg,#f8e8ec,#fff8f3);
+}
+.logo {font-family:Georgia,serif;font-size:30px;letter-spacing:1px}
+.slogan {font-size:12px;color:var(--muted);margin-top:7px}
+.hero {
+  margin:16px;
+  padding:25px 20px;
+  border-radius:20px;
+  background:linear-gradient(130deg,#ead0d5,#f8e9e5);
+}
+.hero h1 {font:26px Georgia,serif;margin:0 0 9px}
+.hero p {font-size:13px;line-height:1.6;margin:0;color:#765c64}
+main {padding:0 16px 110px}
+h2 {font:23px Georgia,serif;margin:24px 0 15px}
+.categories {
+  display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;
+}
+.categories button {
+  flex-shrink:0;border:1px solid var(--line);
+  background:white;color:var(--dark);
+  border-radius:22px;padding:10px 14px;font-size:12px;
+}
+.categories button.active {background:var(--dark);color:white}
+.products {
+  display:grid;grid-template-columns:1fr 1fr;gap:13px;
+}
+.product {
+  background:white;border-radius:17px;overflow:hidden;
+  border:1px solid #f3e8e9;
+}
+.product img {
+  width:100%;height:145px;object-fit:cover;background:#f2e5e7;
+}
+.product-info {padding:12px}
+.product h3 {font:17px Georgia,serif;margin:0 0 7px}
+.product p {font-size:11px;color:var(--muted);line-height:1.5;min-height:32px;margin:0 0 10px}
+.price {font-size:11px;color:#98717d;margin-bottom:11px}
+.add {
+  width:100%;border:0;border-radius:20px;
+  padding:10px;background:#f4e3e7;color:#654852;font-weight:600;
+}
+.cart-button {
+  position:fixed;bottom:15px;left:16px;right:16px;
+  background:var(--dark);color:white;border:0;border-radius:30px;
+  padding:16px;font-size:15px;box-shadow:0 5px 20px #593d4630;
+}
+.modal {
+  display:none;position:fixed;inset:0;background:#0006;
+  z-index:5;align-items:flex-end;
+}
+.modal.open {display:flex}
+.panel {
+  background:var(--cream);width:100%;max-height:90vh;
+  overflow:auto;border-radius:24px 24px 0 0;padding:22px 18px 30px;
+}
+.panel h2 {margin-top:0}
+.close {float:right;border:0;background:#f1e2e5;border-radius:50%;padding:8px 12px}
+.cart-line {display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);font-size:13px}
+.quantity {display:flex;align-items:center;gap:10px}
+.quantity button {border:0;background:#f1e2e5;border-radius:50%;width:27px;height:27px}
+input,textarea {
+  display:block;width:100%;padding:13px;margin:10px 0;
+  border:1px solid var(--line);border-radius:12px;
+  background:white;font:14px inherit;color:var(--dark);
+}
+textarea {min-height:75px;resize:vertical}
+.submit {
+  width:100%;padding:15px;border:0;border-radius:25px;
+  background:var(--dark);color:white;font-size:15px;
+}
+.note {font-size:11px;color:var(--muted);line-height:1.5}
+.empty {text-align:center;color:var(--muted);padding:25px}
+footer {text-align:center;padding:20px;font:16px Georgia,serif;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Flowers_olia</div>
+  <div class="slogan">Цветы, которые сохраняют любовь</div>
+</header>
+
+<section class="hero">
+  <h1>Подарите эмоции,<br>которые останутся надолго</h1>
+  <p>Нежные композиции ручной работы. Создаём красоту с любовью для ваших особенных моментов.</p>
+</section>
+
+<main>
+  <h2>Наш каталог</h2>
+  <div class="categories" id="categories"></div>
+  <div class="products" id="products"></div>
+  <footer>С любовью, Flowers_olia ♡</footer>
+</main>
+
+<button class="cart-button" id="openCart">🛍 Корзина · <span id="cartCount">0</span></button>
+
+<div class="modal" id="modal">
+  <div class="panel">
+    <button class="close" id="closeCart">✕</button>
+    <h2>Ваш заказ ♡</h2>
+    <div id="cartItems"></div>
+    <p class="note">Стоимость изделий уточняется индивидуально. Мы свяжемся с вами для подтверждения заказа.</p>
+    <h2>Контактные данные</h2>
+    <form id="orderForm">
+      <input id="customer" placeholder="Ваше имя" required maxlength="100">
+      <input id="phone" placeholder="Номер телефона" type="tel" required maxlength="50">
+      <textarea id="comment" placeholder="Пожелания к заказу (необязательно)" maxlength="500"></textarea>
+      <button class="submit" type="submit">Отправить заказ</button>
+    </form>
+    <p class="note" id="status"></p>
+  </div>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+tg?.ready();
+tg?.expand();
+
+const products = [
+ {id:1,name:"Букет из роз",cat:"Букеты",desc:"Нежные атласные розы ручной работы",img:"https://images.unsplash.com/photo-1494972308805-463bc619d34e?w=600"},
+ {id:2,name:"Пышный букет",cat:"Букеты",desc:"Элегантный подарок для особенного дня",img:"https://images.unsplash.com/photo-1520763185298-1b434c919102?w=600"},
+ {id:3,name:"Корзина нежности",cat:"Корзины",desc:"Композиция в красивой корзине",img:"https://images.unsplash.com/photo-1487530811176-3780de880c2d?w=600"},
+ {id:4,name:"Подарочная коробка",cat:"Коробки",desc:"Подарок, оформленный с любовью",img:"https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=600"},
+ {id:5,name:"Сладкий комплимент",cat:"Сладкие композиции",desc:"Красивое сочетание цветов и сладостей",img:"https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=600"},
+ {id:6,name:"Открытки",cat:"Дополнения",desc:"Тёплые слова к вашему подарку",img:"https://images.unsplash.com/photo-1512412046876-f386342eddb3?w=600"},
+ {id:7,name:"Банты",cat:"Дополнения",desc:"Изящные детали оформления",img:"https://images.unsplash.com/photo-1512909006721-3d6018887383?w=600"},
+ {id:8,name:"Декоративная упаковка",cat:"Дополнения",desc:"Завершающий штрих вашего подарка",img:"https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600"}
+];
+
+let activeCategory="Все";
+let cart={};
+
+const categories=["Все","Букеты","Корзины","Коробки","Сладкие композиции","Дополнения"];
+
+function renderCategories(){
+ document.getElementById("categories").innerHTML=categories.map(c=>
+ `<button class="${c===activeCategory?'active':''}" data-cat="${c}">${c}</button>`
+ ).join("");
+ document.querySelectorAll("[data-cat]").forEach(b=>{
+  b.onclick=()=>{activeCategory=b.dataset.cat;renderCategories();renderProducts()};
+ });
+}
+
+function renderProducts(){
+ const shown=products.filter(p=>activeCategory==="Все"||p.cat===activeCategory);
+ document.getElementById("products").innerHTML=shown.map(p=>`
+ <article class="product">
+  <img src="${p.img}" alt="${p.name}" loading="lazy" onerror="this.style.display='none'">
+  <div class="product-info">
+   <h3>${p.name}</h3>
+   <p>${p.desc}</p>
+   <div class="price">Цена уточняется</div>
+   <button class="add" data-add="${p.id}">＋ Добавить</button>
+  </div>
+ </article>`).join("");
+ document.querySelectorAll("[data-add]").forEach(b=>{
+  b.onclick=()=>{const id=Number(b.dataset.add);cart[id]=(cart[id]||0)+1;updateCart();};
+ });
+}
+
+function updateCart(){
+ const count=Object.values(cart).reduce((a,b)=>a+b,0);
+ document.getElementById("cartCount").textContent=count;
+ renderCart();
+}
+
+function renderCart(){
+ const entries=Object.entries(cart).filter(([id,q])=>q>0);
+ document.getElementById("cartItems").innerHTML=entries.length?entries.map(([id,q])=>{
+  const p=products.find(x=>x.id===Number(id));
+  return `<div class="cart-line">
+   <span>${p.name}</span>
+   <div class="quantity">
+    <button data-minus="${id}">−</button>${q}
+    <button data-plus="${id}">＋</button>
+   </div>
+  </div>`;
+ }).join(""):'<div class="empty">В корзине пока пусто ♡</div>';
+ document.querySelectorAll("[data-minus]").forEach(b=>b.onclick=()=>{const id=b.dataset.minus;cart[id]--;if(cart[id]<=0)delete cart[id];updateCart();});
+ document.querySelectorAll("[data-plus]").forEach(b=>b.onclick=()=>{const id=b.dataset.plus;cart[id]++;updateCart();});
+}
+
+document.getElementById("openCart").onclick=()=>{
+ document.getElementById("modal").classList.add("open");
+ renderCart();
+};
+document.getElementById("closeCart").onclick=()=>document.getElementById("modal").classList.remove("open");
+
+document.getElementById("orderForm").onsubmit=async e=>{
+ e.preventDefault();
+ const items=Object.entries(cart).filter(([id,q])=>q>0).map(([id,quantity])=>({
+  name:products.find(p=>p.id===Number(id)).name,quantity
+ }));
+ if(!items.length){document.getElementById("status").textContent="Сначала добавьте товары в корзину.";return;}
+ const status=document.getElementById("status");
+ const button=e.target.querySelector("button[type=submit]");
+ button.disabled=true;
+ status.textContent="Отправляем заказ…";
+ try{
+  const response=await fetch("/api/order",{
+   method:"POST",
+   headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({
+    initData:tg?.initData||"",
+    items,
+    customer:document.getElementById("customer").value,
+    phone:document.getElementById("phone").value,
+    comment:document.getElementById("comment").value
+   })
+  });
+  const result=await response.json();
+  if(!response.ok)throw new Error(result.error||"Не удалось отправить заказ");
+  status.textContent="Спасибо! Заказ отправлен. Мы скоро свяжемся с вами ♡";
+  cart={};updateCart();e.target.reset();
+ }catch(error){
+  status.textContent=error.message+" Откройте каталог внутри Telegram и попробуйте снова.";
+ }finally{button.disabled=false;}
+};
+
+renderCategories();
+renderProducts();
+updateCart();
+</script>
+</body>
+</html>
