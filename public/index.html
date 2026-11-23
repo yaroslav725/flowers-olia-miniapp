@@ -279,15 +279,10 @@ document.getElementById("orderForm").onsubmit = async e => {
     return;
   }
 
-  // Получаем актуальные данные Telegram непосредственно перед отправкой
+  
+  // Получаем данные Telegram, если каталог открыт внутри Telegram
   const webApp = window.Telegram?.WebApp;
   const initData = webApp?.initData || "";
-
-  if (!initData) {
-    status.textContent =
-      "Не получены данные Telegram. Закройте каталог и откройте его через профиль бота.";
-    return;
-  }
 
   const requestBody = {
     initData: initData,
@@ -307,7 +302,7 @@ document.getElementById("orderForm").onsubmit = async e => {
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
-        "X-Telegram-Init-Data": initData
+        ...(initData ? { "X-Telegram-Init-Data": initData } : {})
       },
       body: JSON.stringify(requestBody)
     });
