@@ -123,27 +123,23 @@ app.post("/api/order", async (req, res) => {
   console.log("ПОЛУЧЕН ЗАПРОС НА ЗАКАЗ");
 
   try {
-    const bodyInitData = req.body?.initData;
-    const headerInitData = req.get("X-Telegram-Init-Data");
+  
+const bodyInitData = req.body?.initData;
+const headerInitData = req.get("X-Telegram-Init-Data") || "";
+const initData = headerInitData || bodyInitData || "";
 
-    // Приоритет у заголовка, резервный вариант — тело запроса
-    const initData = headerInitData || bodyInitData || "";
+if (initData) {
+  if (!verifyTelegram(initData)) {
+    console.error("Ошибка проверки Telegram initData");
 
-    console.log("BOT_TOKEN настроен:", Boolean(BOT_TOKEN));
-    console.log("Длина initData из заголовка:",
-      typeof headerInitData === "string" ? headerInitData.length : 0
-    );
-    console.log("Длина initData из тела:",
-      typeof bodyInitData === "string" ? bodyInitData.length : 0
-    );
-
-    if (!verifyTelegram(initData)) {
-      console.error("Ошибка проверки Telegram initData");
-
-      return res.status(401).json({
-        error: "Не удалось подтвердить авторизацию Telegram. Откройте каталог через профиль бота."
-      });
-    }
+    return res.status(401).json({
+      error: "Не удалось подтвердить авторизацию Telegram."
+    });
+  }
+} else {
+  console.log("Заказ оформляется через обычный браузер");
+}
+  
 
     const { items, customer, phone, comment } = req.body;
 
