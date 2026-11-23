@@ -83,7 +83,49 @@ app.post("/api/order", async (req, res) => {
   try {
     const { initData, items, customer, phone, comment } = req.body;
 
-    if (!verifyTelegram(initData)) {
+    function verifyTelegram(initData) {
+  if (!BOT_TOKEN || !initData) {
+    console.error("Нет BOT_TOKEN или initData");
+    return false;
+  }
+
+  try {
+    const params = new URLSearchParams(initData);
+    const hash = params.get("hash");
+
+    if (!hash || !/^[a-f0-9]{64}$/i.test(hash)) {
+      console.error("Некорректный hash Telegram");
+      return false;
+    }
+
+    params.delete("hash");
+
+    const dataCheckString = [...params.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => `${key}=${value}`)
+      .join("\n");
+
+    const secretKey = crypto
+      .createHmac("sha256", "WebAppData")
+      .update(BOT_TOKEN)
+      .digest();
+
+    const calculatedHash = crypto
+      .createHmac("sha256", secretKey)
+      .update(dataCheckString)
+      .digest("hex");
+
+    const received = Buffer.from(hash, "hex");
+    const calculated = Buffer.from(calculatedHash, "hex");
+
+    return received.length === calculated.length &&
+      crypto.timingSafeEqual(received, calculated);
+
+  } catch (error) {
+    console.error("Ошибка проверки initData:", error.message);
+    return false;
+  }
+}
       console.error("Ошибка проверки Telegram initData");
       return res.status(401).json({ error: "Проверка Telegram не пройдена" });
     }
